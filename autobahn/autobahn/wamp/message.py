@@ -118,9 +118,9 @@ class Error(Message):
    A WAMP `ERROR` message.
 
    Formats:
-     * `[ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]`
-     * `[ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]`
-     * `[ERROR, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]`
+     * `[ERROR, Session|id, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri]`
+     * `[ERROR, Session|id, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list]`
+     * `[ERROR, Session|id, REQUEST.Type|int, REQUEST.Request|id, Details|dict, Error|uri, Arguments|list, ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 4
@@ -129,10 +129,12 @@ class Error(Message):
    """
 
 
-   def __init__(self, request_type, request, error, args = None, kwargs = None):
+   def __init__(self, session, request_type, request, error, args = None, kwargs = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request_type: The WAMP message type code for the original request.
       :type request_type: int
       :param request: The WAMP request ID of the original request (`Call`, `Subscribe`, ...) this error occured for.
@@ -147,6 +149,7 @@ class Error(Message):
       :type kwargs: dict
       """
       Message.__init__(self)
+      self.session = session
       self.request_type = request_type
       self.request = request
       self.error = error
@@ -168,10 +171,12 @@ class Error(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Error.MESSAGE_TYPE)
 
-      if len(wmsg) not in (5, 6, 7):
+      if len(wmsg) not in (6, 7, 8):
          raise ProtocolError("invalid message length {} for ERROR".format(len(wmsg)))
 
-      request_type = wmsg[1]
+      session = check_or_raise_id(wmsg[1], "'session' in ERROR")
+
+      request_type = wmsg[2]
       if type(request_type) not in [int, long]:
          raise ProtocolError("invalid type {} for 'request_type' in ERROR".format(request_type))
 
@@ -184,23 +189,23 @@ class Error(Message):
                               Invocation.MESSAGE_TYPE]:
          raise ProtocolError("invalid value {} for 'request_type' in ERROR".format(request_type))
 
-      request = check_or_raise_id(wmsg[2], "'request' in ERROR")
-      details = check_or_raise_extra(wmsg[3], "'details' in ERROR")
-      error = check_or_raise_uri(wmsg[4], "'error' in ERROR")
+      request = check_or_raise_id(wmsg[3], "'request' in ERROR")
+      details = check_or_raise_extra(wmsg[4], "'details' in ERROR")
+      error = check_or_raise_uri(wmsg[5], "'error' in ERROR")
 
       args = None
-      if len(wmsg) > 5:
-         args = wmsg[5]
+      if len(wmsg) > 6:
+         args = wmsg[6]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in ERROR".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 6:
-         kwargs = wmsg[6]
+      if len(wmsg) > 7:
+         kwargs = wmsg[7]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in ERROR".format(type(kwargs)))
 
-      obj = Error(request_type, request, error, args = args, kwargs = kwargs)
+      obj = Error(session, request_type, request, error, args = args, kwargs = kwargs)
 
       return obj
 
@@ -212,18 +217,18 @@ class Error(Message):
       details = {}
 
       if self.kwargs:
-         return [self.MESSAGE_TYPE, self.request_type, self.request, details, self.error, self.args, self.kwargs]
+         return [self.MESSAGE_TYPE, self.session, self.request_type, self.request, details, self.error, self.args, self.kwargs]
       elif self.args:
-         return [self.MESSAGE_TYPE, self.request_type, self.request, details, self.error, self.args]
+         return [self.MESSAGE_TYPE, self.session, self.request_type, self.request, details, self.error, self.args]
       else:
-         return [self.MESSAGE_TYPE, self.request_type, self.request, details, self.error]
+         return [self.MESSAGE_TYPE, self.session, self.request_type, self.request, details, self.error]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP Error Message (request_type = {}, request = {}, error = {}, args = {}, kwargs = {})".format(self.request_type, self.request, self.error, self.args, self.kwargs)
+      return "WAMP Error Message (session = {}, request_type = {}, request = {}, error = {}, args = {}, kwargs = {})".format(self.session, self.request_type, self.request, self.error, self.args, self.kwargs)
 
 
 
@@ -232,7 +237,7 @@ class Subscribe(Message):
    """
    A WAMP `SUBSCRIBE` message.
 
-   Format: `[SUBSCRIBE, Request|id, Options|dict, Topic|uri]`
+   Format: `[SUBSCRIBE, Session|id, Request|id, Options|dict, Topic|uri]`
    """
 
    MESSAGE_TYPE = 32
@@ -244,10 +249,12 @@ class Subscribe(Message):
    MATCH_PREFIX = 'prefix'
    MATCH_WILDCARD = 'wildcard'
 
-   def __init__(self, request, topic, match = MATCH_EXACT):
+   def __init__(self, session, request, topic, match = MATCH_EXACT):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param topic: The WAMP or application URI of the PubSub topic to subscribe to.
@@ -256,6 +263,7 @@ class Subscribe(Message):
       :type match: str
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.topic = topic
       self.match = match
@@ -275,12 +283,13 @@ class Subscribe(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Subscribe.MESSAGE_TYPE)
 
-      if len(wmsg) != 4:
+      if len(wmsg) != 5:
          raise ProtocolError("invalid message length {} for SUBSCRIBE".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in SUBSCRIBE")
-      options = check_or_raise_extra(wmsg[2], "'options' in SUBSCRIBE")
-      topic = check_or_raise_uri(wmsg[3], "'topic' in SUBSCRIBE")
+      session = check_or_raise_id(wmsg[1], "'session' in SUBSCRIBE")
+      request = check_or_raise_id(wmsg[2], "'request' in SUBSCRIBE")
+      options = check_or_raise_extra(wmsg[3], "'options' in SUBSCRIBE")
+      topic = check_or_raise_uri(wmsg[4], "'topic' in SUBSCRIBE")
 
       match = Subscribe.MATCH_EXACT
 
@@ -295,7 +304,7 @@ class Subscribe(Message):
 
          match = option_match
 
-      obj = Subscribe(request, topic, match)
+      obj = Subscribe(session, request, topic, match)
 
       return obj
 
@@ -309,14 +318,14 @@ class Subscribe(Message):
       if self.match and self.match != Subscribe.MATCH_EXACT:
          options['match'] = self.match
 
-      return [Subscribe.MESSAGE_TYPE, self.request, options, self.topic]
+      return [Subscribe.MESSAGE_TYPE, self.session, self.request, options, self.topic]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP SUBSCRIBE Message (request = {}, topic = {}, match = {})".format(self.request, self.topic, self.match)
+      return "WAMP SUBSCRIBE Message (session = {}, request = {}, topic = {}, match = {})".format(self.session, self.request, self.topic, self.match)
 
 
 
@@ -325,7 +334,7 @@ class Subscribed(Message):
    """
    A WAMP `SUBSCRIBED` message.
 
-   Format: `[SUBSCRIBED, SUBSCRIBE.Request|id, Subscription|id]`
+   Format: `[SUBSCRIBED, Session|id, SUBSCRIBE.Request|id, Subscription|id]`
    """
 
    MESSAGE_TYPE = 33
@@ -333,16 +342,19 @@ class Subscribed(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request, subscription):
+   def __init__(self, session, request, subscription):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `SUBSCRIBE` request.
       :type request: int
       :param subscription: The subscription ID for the subscribed topic (or topic pattern).
       :type subscription: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.subscription = subscription
 
@@ -361,13 +373,14 @@ class Subscribed(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Subscribed.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for SUBSCRIBED".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in SUBSCRIBED")
-      subscription = check_or_raise_id(wmsg[2], "'subscription' in SUBSCRIBED")
+      session = check_or_raise_id(wmsg[1], "'session' in SUBSCRIBED")
+      request = check_or_raise_id(wmsg[2], "'request' in SUBSCRIBED")
+      subscription = check_or_raise_id(wmsg[3], "'subscription' in SUBSCRIBED")
 
-      obj = Subscribed(request, subscription)
+      obj = Subscribed(session, request, subscription)
 
       return obj
 
@@ -376,14 +389,14 @@ class Subscribed(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Subscribed.MESSAGE_TYPE, self.request, self.subscription]
+      return [Subscribed.MESSAGE_TYPE, self.session, self.request, self.subscription]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP SUBSCRIBED Message (request = {}, subscription = {})".format(self.request, self.subscription)
+      return "WAMP SUBSCRIBED Message (session = {}, request = {}, subscription = {})".format(self.session, self.request, self.subscription)
 
 
 
@@ -392,7 +405,7 @@ class Unsubscribe(Message):
    """
    A WAMP `UNSUBSCRIBE` message.
 
-   Format: `[UNSUBSCRIBE, Request|id, SUBSCRIBED.Subscription|id]`
+   Format: `[UNSUBSCRIBE, Session|id, Request|id, SUBSCRIBED.Subscription|id]`
    """
 
    MESSAGE_TYPE = 34
@@ -405,12 +418,15 @@ class Unsubscribe(Message):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param subscription: The subscription ID for the subscription to unsubscribe from.
       :type subscription: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.subscription = subscription
 
@@ -429,13 +445,14 @@ class Unsubscribe(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Unsubscribe.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for WAMP UNSUBSCRIBE".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in UNSUBSCRIBE")
-      subscription = check_or_raise_id(wmsg[2], "'subscription' in UNSUBSCRIBE")
+      session = check_or_raise_id(wmsg[1], "'session' in UNSUBSCRIBE")
+      request = check_or_raise_id(wmsg[2], "'request' in UNSUBSCRIBE")
+      subscription = check_or_raise_id(wmsg[3], "'subscription' in UNSUBSCRIBE")
 
-      obj = Unsubscribe(request, subscription)
+      obj = Unsubscribe(session, request, subscription)
 
       return obj
 
@@ -444,14 +461,14 @@ class Unsubscribe(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Unsubscribe.MESSAGE_TYPE, self.request, self.subscription]
+      return [Unsubscribe.MESSAGE_TYPE, self.session, self.request, self.subscription]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP UNSUBSCRIBE Message (request = {}, subscription = {})".format(self.request, self.subscription)
+      return "WAMP UNSUBSCRIBE Message (session = {}, request = {}, subscription = {})".format(self.session, self.request, self.subscription)
 
 
 
@@ -460,7 +477,7 @@ class Unsubscribed(Message):
    """
    A WAMP `UNSUBSCRIBED` message.
 
-   Format: `[UNSUBSCRIBED, UNSUBSCRIBE.Request|id]`
+   Format: `[UNSUBSCRIBED, Session|id, UNSUBSCRIBE.Request|id]`
    """
 
    MESSAGE_TYPE = 35
@@ -468,14 +485,17 @@ class Unsubscribed(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request):
+   def __init__(self, session, request):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `UNSUBSCRIBE` request.
       :type request: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
 
 
@@ -493,12 +513,13 @@ class Unsubscribed(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Unsubscribed.MESSAGE_TYPE)
 
-      if len(wmsg) != 2:
+      if len(wmsg) != 3:
          raise ProtocolError("invalid message length {} for UNSUBSCRIBED".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in UNSUBSCRIBED")
+      session = check_or_raise_id(wmsg[1], "'session' in UNSUBSCRIBED")
+      request = check_or_raise_id(wmsg[2], "'request' in UNSUBSCRIBED")
 
-      obj = Unsubscribed(request)
+      obj = Unsubscribed(session, request)
 
       return obj
 
@@ -507,14 +528,14 @@ class Unsubscribed(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Unsubscribed.MESSAGE_TYPE, self.request]
+      return [Unsubscribed.MESSAGE_TYPE, self.session, self.request]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP UNSUBSCRIBED Message (request = {})".format(self.request)
+      return "WAMP UNSUBSCRIBED Message (session = {}, request = {})".format(self.session, self.request)
 
 
 
@@ -524,9 +545,9 @@ class Publish(Message):
    A WAMP `PUBLISH` message.
 
    Formats:
-     * `[PUBLISH, Request|id, Options|dict, Topic|uri]`
-     * `[PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list]`
-     * `[PUBLISH, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]`
+     * `[PUBLISH, Session|id, Request|id, Options|dict, Topic|uri]`
+     * `[PUBLISH, Session|id, Request|id, Options|dict, Topic|uri, Arguments|list]`
+     * `[PUBLISH, Session|id, Request|id, Options|dict, Topic|uri, Arguments|list, ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 16
@@ -535,6 +556,7 @@ class Publish(Message):
    """
 
    def __init__(self,
+                session,
                 request,
                 topic,
                 args = None,
@@ -547,6 +569,8 @@ class Publish(Message):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param topic: The WAMP or application URI of the PubSub topic the event should
@@ -574,6 +598,7 @@ class Publish(Message):
       """
       assert(not (kwargs and not args))
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.topic = topic
       self.args = args
@@ -599,22 +624,23 @@ class Publish(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Publish.MESSAGE_TYPE)
 
-      if len(wmsg) not in (4, 5, 6):
+      if len(wmsg) not in (5, 6, 7):
          raise ProtocolError("invalid message length {} for PUBLISH".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in PUBLISH")
-      options = check_or_raise_extra(wmsg[2], "'options' in PUBLISH")
-      topic = check_or_raise_uri(wmsg[3], "'topic' in PUBLISH")
+      session = check_or_raise_id(wmsg[1], "'session' in PUBLISH")
+      request = check_or_raise_id(wmsg[2], "'request' in PUBLISH")
+      options = check_or_raise_extra(wmsg[3], "'options' in PUBLISH")
+      topic = check_or_raise_uri(wmsg[4], "'topic' in PUBLISH")
 
       args = None
-      if len(wmsg) > 4:
-         args = wmsg[4]
+      if len(wmsg) > 5:
+         args = wmsg[5]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in PUBLISH".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 5:
-         kwargs = wmsg[5]
+      if len(wmsg) > 6:
+         kwargs = wmsg[6]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in PUBLISH".format(type(kwargs)))
 
@@ -672,7 +698,8 @@ class Publish(Message):
 
          discloseMe = option_discloseMe
 
-      obj = Publish(request,
+      obj = Publish(session,
+                    request,
                     topic,
                     args = args,
                     kwargs = kwargs,
@@ -703,18 +730,18 @@ class Publish(Message):
          options['discloseme'] = self.discloseMe
 
       if self.kwargs:
-         return [Publish.MESSAGE_TYPE, self.request, options, self.topic, self.args, self.kwargs]
+         return [Publish.MESSAGE_TYPE, self.session, self.request, options, self.topic, self.args, self.kwargs]
       elif self.args:
-         return [Publish.MESSAGE_TYPE, self.request, options, self.topic, self.args]
+         return [Publish.MESSAGE_TYPE, self.session, self.request, options, self.topic, self.args]
       else:
-         return [Publish.MESSAGE_TYPE, self.request, options, self.topic]
+         return [Publish.MESSAGE_TYPE, self.session, self.request, options, self.topic]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP PUBLISH Message (request = {}, topic = {}, args = {}, kwargs = {}, acknowledge = {}, excludeMe = {}, exclude = {}, eligible = {}, discloseMe = {})".format(self.request, self.topic, self.args, self.kwargs, self.acknowledge, self.excludeMe, self.exclude, self.eligible, self.discloseMe)
+      return "WAMP PUBLISH Message (session = {}, request = {}, topic = {}, args = {}, kwargs = {}, acknowledge = {}, excludeMe = {}, exclude = {}, eligible = {}, discloseMe = {})".format(self.session, self.request, self.topic, self.args, self.kwargs, self.acknowledge, self.excludeMe, self.exclude, self.eligible, self.discloseMe)
 
 
 
@@ -723,7 +750,7 @@ class Published(Message):
    """
    A WAMP `PUBLISHED` message.
 
-   Format: `[PUBLISHED, PUBLISH.Request|id, Publication|id]`
+   Format: `[PUBLISHED, Session|id, PUBLISH.Request|id, Publication|id]`
    """
 
    MESSAGE_TYPE = 17
@@ -731,16 +758,19 @@ class Published(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request, publication):
+   def __init__(self, session, request, publication):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `PUBLISH` request.
       :type request: int
       :param publication: The publication ID for the published event.
       :type publication: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.publication = publication
 
@@ -759,13 +789,14 @@ class Published(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Published.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for PUBLISHED".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in PUBLISHED")
-      publication = check_or_raise_id(wmsg[2], "'publication' in PUBLISHED")
+      session = check_or_raise_id(wmsg[1], "'session' in PUBLISHED")
+      request = check_or_raise_id(wmsg[2], "'request' in PUBLISHED")
+      publication = check_or_raise_id(wmsg[3], "'publication' in PUBLISHED")
 
-      obj = Published(request, publication)
+      obj = Published(session, request, publication)
 
       return obj
 
@@ -774,14 +805,14 @@ class Published(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Published.MESSAGE_TYPE, self.request, self.publication]
+      return [Published.MESSAGE_TYPE, self.session, self.request, self.publication]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP PUBLISHED Message (request = {}, publication = {})".format(self.request, self.publication)
+      return "WAMP PUBLISHED Message (session = {}, request = {}, publication = {})".format(self.session, self.request, self.publication)
 
 
 
@@ -792,9 +823,9 @@ class Event(Message):
 
    Formats:
 
-     * `[EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]`
-     * `[EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]`
-     * `[EVENT, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentsKw|dict]`
+     * `[EVENT, Session|id, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict]`
+     * `[EVENT, Session|id, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list]`
+     * `[EVENT, Session|id, SUBSCRIBED.Subscription|id, PUBLISHED.Publication|id, Details|dict, PUBLISH.Arguments|list, PUBLISH.ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 36
@@ -803,10 +834,12 @@ class Event(Message):
    """
 
 
-   def __init__(self, subscription, publication, args = None, kwargs = None, publisher = None):
+   def __init__(self, session, subscription, publication, args = None, kwargs = None, publisher = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param subscription: The subscription ID this event is dispatched under.
       :type subscription: int
       :param publication: The publication ID of the dispatched event.
@@ -822,6 +855,7 @@ class Event(Message):
       """
       assert(not (kwargs and not args))
       Message.__init__(self)
+      self.session = session
       self.subscription = subscription
       self.publication = publication
       self.args = args
@@ -843,22 +877,23 @@ class Event(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Event.MESSAGE_TYPE)
 
-      if len(wmsg) not in (4, 5, 6):
+      if len(wmsg) not in (5, 6, 7):
          raise ProtocolError("invalid message length {} for EVENT".format(len(wmsg)))
 
-      subscription = check_or_raise_id(wmsg[1], "'subscription' in EVENT")
-      publication = check_or_raise_id(wmsg[2], "'publication' in EVENT")
-      details = check_or_raise_extra(wmsg[3], "'details' in EVENT")
+      session = check_or_raise_id(wmsg[1], "'session' in EVENT")
+      subscription = check_or_raise_id(wmsg[2], "'subscription' in EVENT")
+      publication = check_or_raise_id(wmsg[3], "'publication' in EVENT")
+      details = check_or_raise_extra(wmsg[4], "'details' in EVENT")
 
       args = None
-      if len(wmsg) > 4:
-         args = wmsg[4]
+      if len(wmsg) > 5:
+         args = wmsg[5]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in EVENT".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 5:
-         kwargs = wmsg[5]
+      if len(wmsg) > 6:
+         kwargs = wmsg[6]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in EVENT".format(type(kwargs)))
 
@@ -871,7 +906,8 @@ class Event(Message):
 
          publisher = detail_publisher
 
-      obj = Event(subscription,
+      obj = Event(session,
+                  subscription,
                   publication,
                   args = args,
                   kwargs = kwargs,
@@ -890,18 +926,18 @@ class Event(Message):
          details['publisher'] = self.publisher
 
       if self.kwargs:
-         return [Event.MESSAGE_TYPE, self.subscription, self.publication, details, self.args, self.kwargs]
+         return [Event.MESSAGE_TYPE, self.session, self.subscription, self.publication, details, self.args, self.kwargs]
       elif self.args:
-         return [Event.MESSAGE_TYPE, self.subscription, self.publication, details, self.args]
+         return [Event.MESSAGE_TYPE, self.session, self.subscription, self.publication, details, self.args]
       else:
-         return [Event.MESSAGE_TYPE, self.subscription, self.publication, details]
+         return [Event.MESSAGE_TYPE, self.session, self.subscription, self.publication, details]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP EVENT Message (subscription = {}, publication = {}, args = {}, kwargs = {}, publisher = {})".format(self.subscription, self.publication, self.args, self.kwargs, self.publisher)
+      return "WAMP EVENT Message (session = {}, subscription = {}, publication = {}, args = {}, kwargs = {}, publisher = {})".format(self.session, self.subscription, self.publication, self.args, self.kwargs, self.publisher)
 
 
 
@@ -910,7 +946,7 @@ class Register(Message):
    """
    A WAMP `REGISTER` message.
 
-   Format: `[REGISTER, Request|id, Options|dict, Procedure|uri]`
+   Format: `[REGISTER, Session|id, Request|id, Options|dict, Procedure|uri]`
    """
 
    MESSAGE_TYPE = 64
@@ -918,10 +954,12 @@ class Register(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request, procedure, pkeys = None):
+   def __init__(self, session, request, procedure, pkeys = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param procedure: The WAMP or application URI of the RPC endpoint provided.
@@ -930,6 +968,7 @@ class Register(Message):
       :type pkeys: list
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.procedure = procedure
       self.pkeys = pkeys
@@ -949,12 +988,13 @@ class Register(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Register.MESSAGE_TYPE)
 
-      if len(wmsg) != 4:
+      if len(wmsg) != 5:
          raise ProtocolError("invalid message length {} for REGISTER".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in REGISTER")
-      options = check_or_raise_extra(wmsg[2], "'options' in REGISTER")
-      procedure = check_or_raise_uri(wmsg[3], "'procedure' in REGISTER")
+      session = check_or_raise_id(wmsg[1], "'session' in REGISTER")
+      request = check_or_raise_id(wmsg[2], "'request' in REGISTER")
+      options = check_or_raise_extra(wmsg[3], "'options' in REGISTER")
+      procedure = check_or_raise_uri(wmsg[4], "'procedure' in REGISTER")
 
       pkeys = None
 
@@ -970,7 +1010,7 @@ class Register(Message):
 
          pkeys = option_pkeys
 
-      obj = Register(request, procedure, pkeys = pkeys)
+      obj = Register(session, request, procedure, pkeys = pkeys)
 
       return obj
 
@@ -984,14 +1024,14 @@ class Register(Message):
       if self.pkeys is not None:
          options['pkeys'] = self.pkeys
 
-      return [Register.MESSAGE_TYPE, self.request, options, self.procedure]
+      return [Register.MESSAGE_TYPE, self.session, self.request, options, self.procedure]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP REGISTER Message (request = {}, procedure = {}, pkeys = {})".format(self.request, self.procedure, self.pkeys)
+      return "WAMP REGISTER Message (session = {}, request = {}, procedure = {}, pkeys = {})".format(self.session, self.request, self.procedure, self.pkeys)
 
 
 
@@ -1000,7 +1040,7 @@ class Registered(Message):
    """
    A WAMP `REGISTERED` message.
 
-   Format: `[REGISTERED, REGISTER.Request|id, Registration|id]`
+   Format: `[REGISTERED, Session|id, REGISTER.Request|id, Registration|id]`
    """
 
    MESSAGE_TYPE = 65
@@ -1008,16 +1048,19 @@ class Registered(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request, registration):
+   def __init__(self, session, request, registration):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `REGISTER` request.
       :type request: int
       :param subscription: The registration ID for the registered procedure (or procedure pattern).
       :type subscription: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.registration = registration
 
@@ -1036,13 +1079,14 @@ class Registered(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Registered.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for REGISTERED".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in REGISTERED")
-      registration = check_or_raise_id(wmsg[2], "'registration' in REGISTERED")
+      session = check_or_raise_id(wmsg[1], "'session' in REGISTERED")
+      request = check_or_raise_id(wmsg[2], "'request' in REGISTERED")
+      registration = check_or_raise_id(wmsg[3], "'registration' in REGISTERED")
 
-      obj = Registered(request, registration)
+      obj = Registered(session, request, registration)
 
       return obj
 
@@ -1051,14 +1095,14 @@ class Registered(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Registered.MESSAGE_TYPE, self.request, self.registration]
+      return [Registered.MESSAGE_TYPE, self.session, self.request, self.registration]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP REGISTERED Message (request = {}, registration = {})".format(self.request, self.registration)
+      return "WAMP REGISTERED Message (session = {}, request = {}, registration = {})".format(self.session, self.request, self.registration)
 
 
 
@@ -1067,7 +1111,7 @@ class Unregister(Message):
    """
    A WAMP Unprovide message.
 
-   Format: `[UNREGISTER, Request|id, REGISTERED.Registration|id]`
+   Format: `[UNREGISTER, Session|id, Request|id, REGISTERED.Registration|id]`
    """
 
    MESSAGE_TYPE = 66
@@ -1076,16 +1120,19 @@ class Unregister(Message):
    """
 
 
-   def __init__(self, request, registration):
+   def __init__(self, session, request, registration):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param registration: The registration ID for the registration to unregister.
       :type registration: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.registration = registration
 
@@ -1104,13 +1151,14 @@ class Unregister(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Unregister.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for WAMP UNREGISTER".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in UNREGISTER")
-      registration = check_or_raise_id(wmsg[2], "'registration' in UNREGISTER")
+      session = check_or_raise_id(wmsg[1], "'session' in UNREGISTER")
+      request = check_or_raise_id(wmsg[2], "'request' in UNREGISTER")
+      registration = check_or_raise_id(wmsg[3], "'registration' in UNREGISTER")
 
-      obj = Unregister(request, registration)
+      obj = Unregister(session, request, registration)
 
       return obj
 
@@ -1119,14 +1167,14 @@ class Unregister(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Unregister.MESSAGE_TYPE, self.request, self.registration]
+      return [Unregister.MESSAGE_TYPE, self.session, self.request, self.registration]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP UNREGISTER Message (request = {}, registration = {})".format(self.request, self.registration)
+      return "WAMP UNREGISTER Message (session = {}, request = {}, registration = {})".format(self.session, self.request, self.registration)
 
 
 
@@ -1135,7 +1183,7 @@ class Unregistered(Message):
    """
    A WAMP `UNREGISTERED` message.
 
-   Format: `[UNREGISTERED, UNREGISTER.Request|id]`
+   Format: `[UNREGISTERED, Session|id, UNREGISTER.Request|id]`
    """
 
    MESSAGE_TYPE = 67
@@ -1143,14 +1191,17 @@ class Unregistered(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request):
+   def __init__(self, session, request):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `UNREGISTER` request.
       :type request: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
 
 
@@ -1168,10 +1219,11 @@ class Unregistered(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Unregistered.MESSAGE_TYPE)
 
-      if len(wmsg) != 2:
+      if len(wmsg) != 3:
          raise ProtocolError("invalid message length {} for UNREGISTER".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in UNREGISTER")
+      session = check_or_raise_id(wmsg[1], "'session' in UNREGISTER")
+      request = check_or_raise_id(wmsg[2], "'request' in UNREGISTER")
 
       obj = Unregistered(request)
 
@@ -1182,14 +1234,14 @@ class Unregistered(Message):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
-      return [Unregistered.MESSAGE_TYPE, self.request]
+      return [Unregistered.MESSAGE_TYPE, self.session, self.request]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP UNREGISTER Message (request = {})".format(self.request)
+      return "WAMP UNREGISTER Message (session = {}, request = {})".format(self.session, self.request)
 
 
 
@@ -1199,9 +1251,9 @@ class Call(Message):
    A WAMP `CALL` message.
 
    Formats:
-     * `[CALL, Request|id, Options|dict, Procedure|uri]`
-     * `[CALL, Request|id, Options|dict, Procedure|uri, Arguments|list]`
-     * `[CALL, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]`
+     * `[CALL, Session|id, Request|id, Options|dict, Procedure|uri]`
+     * `[CALL, Session|id, Request|id, Options|dict, Procedure|uri, Arguments|list]`
+     * `[CALL, Session|id, Request|id, Options|dict, Procedure|uri, Arguments|list, ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 48
@@ -1210,6 +1262,7 @@ class Call(Message):
    """
 
    def __init__(self,
+                session,
                 request,
                 procedure,
                 args = None,
@@ -1220,6 +1273,8 @@ class Call(Message):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param topic: The WAMP or application URI of the procedure which should be called.
@@ -1234,6 +1289,7 @@ class Call(Message):
       :type timeout: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.procedure = procedure
       self.args = args
@@ -1257,22 +1313,23 @@ class Call(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Call.MESSAGE_TYPE)
 
-      if len(wmsg) not in (4, 5, 6):
+      if len(wmsg) not in (5, 6, 7):
          raise ProtocolError("invalid message length {} for CALL".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in CALL")
-      options = check_or_raise_extra(wmsg[2], "'options' in CALL")
-      procedure = check_or_raise_uri(wmsg[3], "'procedure' in CALL")
+      session = check_or_raise_id(wmsg[1], "'session' in CALL")
+      request = check_or_raise_id(wmsg[2], "'request' in CALL")
+      options = check_or_raise_extra(wmsg[3], "'options' in CALL")
+      procedure = check_or_raise_uri(wmsg[4], "'procedure' in CALL")
 
       args = None
-      if len(wmsg) > 4:
-         args = wmsg[4]
+      if len(wmsg) > 5:
+         args = wmsg[5]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in CALL".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 5:
-         kwargs = wmsg[5]
+      if len(wmsg) > 6:
+         kwargs = wmsg[6]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in CALL".format(type(kwargs)))
 
@@ -1306,7 +1363,8 @@ class Call(Message):
 
          discloseMe = option_discloseMe
 
-      obj = Call(request,
+      obj = Call(session,
+                 request,
                  procedure,
                  args = args,
                  kwargs = kwargs,
@@ -1333,18 +1391,18 @@ class Call(Message):
          options['discloseme'] = self.discloseMe
 
       if self.kwargs:
-         return [Call.MESSAGE_TYPE, self.request, options, self.procedure, self.args, self.kwargs]
+         return [Call.MESSAGE_TYPE, self.session, self.request, options, self.procedure, self.args, self.kwargs]
       elif self.args:
-         return [Call.MESSAGE_TYPE, self.request, options, self.procedure, self.args]
+         return [Call.MESSAGE_TYPE, self.session, self.request, options, self.procedure, self.args]
       else:
-         return [Call.MESSAGE_TYPE, self.request, options, self.procedure]
+         return [Call.MESSAGE_TYPE, self.session, self.request, options, self.procedure]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP CALL Message (request = {}, procedure = {}, args = {}, kwargs = {}, timeout = {}, receive_progress = {}, discloseMe = {})".format(self.request, self.procedure, self.args, self.kwargs, self.timeout, self.receive_progress, self.discloseMe)
+      return "WAMP CALL Message (session = {}, request = {}, procedure = {}, args = {}, kwargs = {}, timeout = {}, receive_progress = {}, discloseMe = {})".format(self.session, self.request, self.procedure, self.args, self.kwargs, self.timeout, self.receive_progress, self.discloseMe)
 
 
 
@@ -1353,7 +1411,7 @@ class Cancel(Message):
    """
    A WAMP `CANCEL` message.
 
-   Format: `[CANCEL, CALL.Request|id, Options|dict]`
+   Format: `[CANCEL, Session|id, CALL.Request|id, Options|dict]`
    """
 
    MESSAGE_TYPE = 49
@@ -1366,16 +1424,19 @@ class Cancel(Message):
    KILL = 'kill'
 
 
-   def __init__(self, request, mode = None):
+   def __init__(self, session, request, mode = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of the original `CALL` to cancel.
       :type request: int
       :param mode: Specifies how to cancel the call (skip, abort or kill).
       :type mode: str
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.mode = mode
 
@@ -1394,11 +1455,12 @@ class Cancel(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Cancel.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for CANCEL".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in CANCEL")
-      options = check_or_raise_extra(wmsg[2], "'options' in CANCEL")
+      session = check_or_raise_id(wmsg[1], "'session' in CANCEL")
+      request = check_or_raise_id(wmsg[2], "'request' in CANCEL")
+      options = check_or_raise_extra(wmsg[3], "'options' in CANCEL")
 
       ## options
       ##
@@ -1415,7 +1477,7 @@ class Cancel(Message):
 
          mode = option_mode
 
-      obj = Cancel(request, mode = mode)
+      obj = Cancel(session, request, mode = mode)
 
       return obj
 
@@ -1429,14 +1491,14 @@ class Cancel(Message):
       if self.mode is not None:
          options['mode'] = self.mode
 
-      return [Cancel.MESSAGE_TYPE, self.request, options]
+      return [Cancel.MESSAGE_TYPE, self.session, self.request, options]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP CANCEL Message (request = {}, mode = '{}'')".format(self.request, self.mode)
+      return "WAMP CANCEL Message (session = {}, request = {}, mode = '{}'')".format(self.session, self.request, self.mode)
 
 
 
@@ -1446,9 +1508,9 @@ class Result(Message):
    A WAMP `RESULT` message.
 
    Formats:
-     * `[RESULT, CALL.Request|id, Details|dict]`
-     * `[RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list]`
-     * `[RESULT, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]`
+     * `[RESULT, Session|id, CALL.Request|id, Details|dict]`
+     * `[RESULT, Session|id, CALL.Request|id, Details|dict, YIELD.Arguments|list]`
+     * `[RESULT, Session|id, CALL.Request|id, Details|dict, YIELD.Arguments|list, YIELD.ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 50
@@ -1456,10 +1518,12 @@ class Result(Message):
    The WAMP message code for this type of message.
    """
 
-   def __init__(self, request, args = None, kwargs = None, progress = None):
+   def __init__(self, session, request, args = None, kwargs = None, progress = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The request ID of the original `CALL` request.
       :type request: int
       :param args: Positional values for application-defined event payload.
@@ -1472,6 +1536,7 @@ class Result(Message):
                  results (or a final error) will follow.
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.args = args
       self.kwargs = kwargs
@@ -1492,21 +1557,22 @@ class Result(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Result.MESSAGE_TYPE)
 
-      if len(wmsg) not in (3, 4, 5):
+      if len(wmsg) not in (4, 5, 6):
          raise ProtocolError("invalid message length {} for RESULT".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in RESULT")
-      details = check_or_raise_extra(wmsg[2], "'details' in RESULT")
+      session = check_or_raise_id(wmsg[1], "'session' in RESULT")
+      request = check_or_raise_id(wmsg[2], "'request' in RESULT")
+      details = check_or_raise_extra(wmsg[3], "'details' in RESULT")
 
       args = None
-      if len(wmsg) > 3:
-         args = wmsg[3]
+      if len(wmsg) > 4:
+         args = wmsg[4]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in RESULT".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 4:
-         kwargs = wmsg[4]
+      if len(wmsg) > 5:
+         kwargs = wmsg[5]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in RESULT".format(type(kwargs)))
 
@@ -1520,7 +1586,7 @@ class Result(Message):
 
          progress = detail_progress
 
-      obj = Result(request, args = args, kwargs = kwargs, progress = progress)
+      obj = Result(session, request, args = args, kwargs = kwargs, progress = progress)
 
       return obj
 
@@ -1535,18 +1601,18 @@ class Result(Message):
          details['progress'] = self.progress
 
       if self.kwargs:
-         return [Result.MESSAGE_TYPE, self.request, details, self.args, self.kwargs]
+         return [Result.MESSAGE_TYPE, self.session, self.request, details, self.args, self.kwargs]
       elif self.args:
-         return [Result.MESSAGE_TYPE, self.request, details, self.args]
+         return [Result.MESSAGE_TYPE, self.session, self.request, details, self.args]
       else:
-         return [Result.MESSAGE_TYPE, self.request, details]
+         return [Result.MESSAGE_TYPE, self.session, self.request, details]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP RESULT Message (request = {}, args = {}, kwargs = {}, progress = {})".format(self.request, self.args, self.kwargs, self.progress)
+      return "WAMP RESULT Message (session = {}, request = {}, args = {}, kwargs = {}, progress = {})".format(self.session, self.request, self.args, self.kwargs, self.progress)
 
 
 
@@ -1556,9 +1622,9 @@ class Invocation(Message):
    A WAMP `INVOCATION` message.
 
    Formats:
-     * `[INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict]`
-     * `[INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]`
-     * `[INVOCATION, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]`
+     * `[INVOCATION, Session|id, Request|id, REGISTERED.Registration|id, Details|dict]`
+     * `[INVOCATION, Session|id, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list]`
+     * `[INVOCATION, Session|id, Request|id, REGISTERED.Registration|id, Details|dict, CALL.Arguments|list, CALL.ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 68
@@ -1568,6 +1634,7 @@ class Invocation(Message):
 
 
    def __init__(self,
+                session,
                 request,
                 registration,
                 args = None,
@@ -1578,6 +1645,8 @@ class Invocation(Message):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of this request.
       :type request: int
       :param registration: The registration ID of the endpoint to be invoked.
@@ -1593,6 +1662,7 @@ class Invocation(Message):
       :type timeout: int
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.registration = registration
       self.args = args
@@ -1616,22 +1686,23 @@ class Invocation(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Invocation.MESSAGE_TYPE)
 
-      if len(wmsg) not in (4, 5, 6):
+      if len(wmsg) not in (5, 6, 7):
          raise ProtocolError("invalid message length {} for INVOCATION".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in INVOCATION")
-      registration = check_or_raise_id(wmsg[2], "'registration' in INVOCATION")
-      details = check_or_raise_extra(wmsg[3], "'details' in INVOCATION")
+      session = check_or_raise_id(wmsg[1], "'session' in INVOCATION")
+      request = check_or_raise_id(wmsg[2], "'request' in INVOCATION")
+      registration = check_or_raise_id(wmsg[3], "'registration' in INVOCATION")
+      details = check_or_raise_extra(wmsg[4], "'details' in INVOCATION")
 
       args = None
-      if len(wmsg) > 4:
-         args = wmsg[4]
+      if len(wmsg) > 5:
+         args = wmsg[5]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in INVOCATION".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 5:
-         kwargs = wmsg[5]
+      if len(wmsg) > 6:
+         kwargs = wmsg[6]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in INVOCATION".format(type(kwargs)))
 
@@ -1665,7 +1736,8 @@ class Invocation(Message):
 
          caller = detail_caller
 
-      obj = Invocation(request,
+      obj = Invocation(session,
+                       request,
                        registration,
                        args = args,
                        kwargs = kwargs,
@@ -1692,18 +1764,18 @@ class Invocation(Message):
          options['caller'] = self.caller
 
       if self.kwargs:
-         return [Invocation.MESSAGE_TYPE, self.request, self.registration, options, self.args, self.kwargs]
+         return [Invocation.MESSAGE_TYPE, self.session, self.request, self.registration, options, self.args, self.kwargs]
       elif self.args:
-         return [Invocation.MESSAGE_TYPE, self.request, self.registration, options, self.args]
+         return [Invocation.MESSAGE_TYPE, self.session, self.request, self.registration, options, self.args]
       else:
-         return [Invocation.MESSAGE_TYPE, self.request, self.registration, options]
+         return [Invocation.MESSAGE_TYPE, self.session, self.request, self.registration, options]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP INVOCATION Message (request = {}, registration = {}, args = {}, kwargs = {}, timeout = {}, receive_progress = {}, caller = {})".format(self.request, self.registration, self.args, self.kwargs, self.timeout, self.receive_progress, self.caller)
+      return "WAMP INVOCATION Message (session = {}, request = {}, registration = {}, args = {}, kwargs = {}, timeout = {}, receive_progress = {}, caller = {})".format(self.session, self.request, self.registration, self.args, self.kwargs, self.timeout, self.receive_progress, self.caller)
 
 
 
@@ -1712,7 +1784,7 @@ class Interrupt(Message):
    """
    A WAMP `INTERRUPT` message.
 
-   Format: `[INTERRUPT, INVOCATION.Request|id, Options|dict]`
+   Format: `[INTERRUPT, Session|id, INVOCATION.Request|id, Options|dict]`
    """
 
    MESSAGE_TYPE = 69
@@ -1724,16 +1796,19 @@ class Interrupt(Message):
    KILL = 'kill'
 
 
-   def __init__(self, request, mode = None):
+   def __init__(self, session, request, mode = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of the original `INVOCATION` to interrupt.
       :type request: int
       :param mode: Specifies how to interrupt the invocation (abort or kill).
       :type mode: str
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.mode = mode
 
@@ -1752,11 +1827,12 @@ class Interrupt(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Interrupt.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for INTERRUPT".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in INTERRUPT")
-      options = check_or_raise_extra(wmsg[2], "'options' in INTERRUPT")
+      session = check_or_raise_id(wmsg[1], "'session' in INTERRUPT")
+      request = check_or_raise_id(wmsg[2], "'request' in INTERRUPT")
+      options = check_or_raise_extra(wmsg[3], "'options' in INTERRUPT")
 
       ## options
       ##
@@ -1773,7 +1849,7 @@ class Interrupt(Message):
 
          mode = option_mode
 
-      obj = Interrupt(request, mode = mode)
+      obj = Interrupt(session, request, mode = mode)
 
       return obj
 
@@ -1787,14 +1863,14 @@ class Interrupt(Message):
       if self.mode is not None:
          options['mode'] = self.mode
 
-      return [Interrupt.MESSAGE_TYPE, self.request, options]
+      return [Interrupt.MESSAGE_TYPE, self.session, self.request, options]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP INTERRUPT Message (request = {}, mode = '{}'')".format(self.request, self.mode)
+      return "WAMP INTERRUPT Message (session = {}, request = {}, mode = '{}'')".format(self.session, self.request, self.mode)
 
 
 
@@ -1804,9 +1880,9 @@ class Yield(Message):
    A WAMP `YIELD` message.
 
    Formats:
-     * `[YIELD, INVOCATION.Request|id, Options|dict]`
-     * `[YIELD, INVOCATION.Request|id, Options|dict, Arguments|list]`
-     * `[YIELD, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]`
+     * `[YIELD, Session|id, INVOCATION.Request|id, Options|dict]`
+     * `[YIELD, Session|id, INVOCATION.Request|id, Options|dict, Arguments|list]`
+     * `[YIELD, Session|id, INVOCATION.Request|id, Options|dict, Arguments|list, ArgumentsKw|dict]`
    """
 
    MESSAGE_TYPE = 70
@@ -1815,10 +1891,12 @@ class Yield(Message):
    """
 
 
-   def __init__(self, request, args = None, kwargs = None, progress = None):
+   def __init__(self, session, request, args = None, kwargs = None, progress = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param request: The WAMP request ID of the original call.
       :type request: int
       :param args: Positional values for application-defined event payload.
@@ -1831,6 +1909,7 @@ class Yield(Message):
                  results (or a final error) will follow.
       """
       Message.__init__(self)
+      self.session = session
       self.request = request
       self.args = args
       self.kwargs = kwargs
@@ -1851,21 +1930,22 @@ class Yield(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Yield.MESSAGE_TYPE)
 
-      if len(wmsg) not in (3, 4, 5):
+      if len(wmsg) not in (4, 5, 6):
          raise ProtocolError("invalid message length {} for YIELD".format(len(wmsg)))
 
-      request = check_or_raise_id(wmsg[1], "'request' in YIELD")
-      options = check_or_raise_extra(wmsg[2], "'options' in YIELD")
+      session = check_or_raise_id(wmsg[1], "'session' in YIELD")
+      request = check_or_raise_id(wmsg[2], "'request' in YIELD")
+      options = check_or_raise_extra(wmsg[3], "'options' in YIELD")
 
       args = None
-      if len(wmsg) > 3:
-         args = wmsg[3]
+      if len(wmsg) > 4:
+         args = wmsg[4]
          if type(args) != list:
             raise ProtocolError("invalid type {} for 'args' in YIELD".format(type(args)))
 
       kwargs = None
-      if len(wmsg) > 4:
-         kwargs = wmsg[4]
+      if len(wmsg) > 5:
+         kwargs = wmsg[5]
          if type(kwargs) != dict:
             raise ProtocolError("invalid type {} for 'kwargs' in YIELD".format(type(kwargs)))
 
@@ -1879,7 +1959,7 @@ class Yield(Message):
 
          progress = option_progress
 
-      obj = Yield(request, args = args, kwargs = kwargs, progress = progress)
+      obj = Yield(session, request, args = args, kwargs = kwargs, progress = progress)
 
       return obj
 
@@ -1894,18 +1974,18 @@ class Yield(Message):
          options['progress'] = self.progress
 
       if self.kwargs:
-         return [Yield.MESSAGE_TYPE, self.request, options, self.args, self.kwargs]
+         return [Yield.MESSAGE_TYPE, self.session, self.request, options, self.args, self.kwargs]
       elif self.args:
-         return [Yield.MESSAGE_TYPE, self.request, options, self.args]
+         return [Yield.MESSAGE_TYPE, self.session, self.request, options, self.args]
       else:
-         return [Yield.MESSAGE_TYPE, self.request, options]
+         return [Yield.MESSAGE_TYPE, self.session, self.request, options]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP YIELD Message (request = {}, args = {}, kwargs = {}, progress = {})".format(self.request, self.args, self.kwargs, self.progress)
+      return "WAMP YIELD Message (session = {}, request = {}, args = {}, kwargs = {}, progress = {})".format(self.session, self.request, self.args, self.kwargs, self.progress)
 
 
 
@@ -1914,7 +1994,7 @@ class Hello(Message):
    """
    A WAMP `HELLO` message.
 
-   Format: `[HELLO, Session|id, Details|dict]`
+   Format: `[HELLO, Session|id, Realm|uri, Details|dict]`
    """
 
    MESSAGE_TYPE = 1
@@ -1923,7 +2003,7 @@ class Hello(Message):
    """
 
 
-   def __init__(self, session, roles):
+   def __init__(self, session, realm, roles):
       """
       Message constructor.
 
@@ -1934,6 +2014,7 @@ class Hello(Message):
          assert(isinstance(role, autobahn.wamp.role.RoleFeatures))
       Message.__init__(self)
       self.session = session
+      self.realm = realm
       self.roles = roles
 
 
@@ -1951,11 +2032,12 @@ class Hello(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Hello.MESSAGE_TYPE)
 
-      if len(wmsg) != 3:
+      if len(wmsg) != 4:
          raise ProtocolError("invalid message length {} for HELLO".format(len(wmsg)))
 
       session = check_or_raise_id(wmsg[1], "'session' in HELLO")
-      details = check_or_raise_extra(wmsg[2], "'details' in HELLO")
+      realm = check_or_raise_uri(wmsg[2], "'realm' in HELLO")
+      details = check_or_raise_extra(wmsg[3], "'details' in HELLO")
 
       roles = []
 
@@ -1982,7 +2064,7 @@ class Hello(Message):
 
          roles.append(role_features)
 
-      obj = Hello(session, roles)
+      obj = Hello(session, realm, roles)
 
       return obj
 
@@ -2000,14 +2082,14 @@ class Hello(Message):
                   details['roles'][role.ROLE] = {'features': {}}
                details['roles'][role.ROLE]['features'][feature] = getattr(role, feature)
 
-      return [Hello.MESSAGE_TYPE, self.session, details]
+      return [Hello.MESSAGE_TYPE, self.session, self.realm, details]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP HELLO Message (session = {}, roles = {})".format(self.session, self.roles)
+      return "WAMP HELLO Message (session = {}, realm = {}, roles = {})".format(self.session, self.realm, self.roles)
 
 
 
@@ -2016,7 +2098,7 @@ class Goodbye(Message):
    """
    A WAMP `GOODBYE` message.
 
-   Format: `[GOODBYE, Details|dict]`
+   Format: `[GOODBYE, Session|id, Details|dict]`
    """
 
    MESSAGE_TYPE = 2
@@ -2025,16 +2107,19 @@ class Goodbye(Message):
    """
 
 
-   def __init__(self, reason = None, message = None):
+   def __init__(self, session, reason = None, message = None):
       """
       Message constructor.
 
-      :param error: Optional WAMP or application error URI for closing reason.
-      :type error: str
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
+      :param reason: Optional WAMP or application URI for closing reason.
+      :type reason: str
       :param message: Optional human-readable closing message, e.g. for logging purposes.
       :type message: str
       """
       Message.__init__(self)
+      self.session = session
       self.reason = reason
       self.message = message
 
@@ -2053,10 +2138,11 @@ class Goodbye(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Goodbye.MESSAGE_TYPE)
 
-      if len(wmsg) != 2:
+      if len(wmsg) != 3:
          raise ProtocolError("invalid message length {} for GOODBYE".format(len(wmsg)))
 
-      details = check_or_raise_extra(wmsg[1], "'details' in GOODBYE")
+      session = check_or_raise_id(wmsg[1], "'session' in GOODBYE")
+      details = check_or_raise_extra(wmsg[2], "'details' in GOODBYE")
 
       reason = None
       message = None
@@ -2072,7 +2158,7 @@ class Goodbye(Message):
 
          message = details_message
 
-      obj = Goodbye(reason, message)
+      obj = Goodbye(session, reason, message)
 
       return obj
 
@@ -2087,14 +2173,14 @@ class Goodbye(Message):
       if self.message:
          details['message'] = self.message
 
-      return [Goodbye.MESSAGE_TYPE, details]
+      return [Goodbye.MESSAGE_TYPE, self.session, details]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP GOODBYE Message ()"
+      return "WAMP GOODBYE Message (session = {}, reason = {}, message = {})".format(self.session, self.reason, self.message)
 
 
 
@@ -2105,8 +2191,8 @@ class Heartbeat(Message):
 
    Formats:
 
-     * `[HEARTBEAT, Incoming|integer, Outgoing|integer]`
-     * `[HEARTBEAT, Incoming|integer, Outgoing|integer, Discard|string]`
+     * `[HEARTBEAT, Session|id, Incoming|integer, Outgoing|integer]`
+     * `[HEARTBEAT, Session|id, Incoming|integer, Outgoing|integer, Discard|string]`
    """
 
    MESSAGE_TYPE = 3
@@ -2115,10 +2201,12 @@ class Heartbeat(Message):
    """
 
 
-   def __init__(self, incoming, outgoing, discard = None):
+   def __init__(self, session, incoming, outgoing, discard = None):
       """
       Message constructor.
 
+      :param session: The WAMP session ID this message is transported for.
+      :type session: int
       :param incoming: Last incoming heartbeat processed from peer.
       :type incoming: int
       :param outgoing: Outgoing heartbeat.
@@ -2127,6 +2215,7 @@ class Heartbeat(Message):
       :type discard: str
       """
       Message.__init__(self)
+      self.session = session
       self.incoming = incoming
       self.outgoing = outgoing
       self.discard = discard
@@ -2146,10 +2235,12 @@ class Heartbeat(Message):
       ##
       assert(len(wmsg) > 0 and wmsg[0] == Heartbeat.MESSAGE_TYPE)
 
-      if len(wmsg) not in [3, 4]:
+      if len(wmsg) not in [4, 5]:
          raise ProtocolError("invalid message length {} for HEARTBEAT".format(len(wmsg)))
 
-      incoming = wmsg[1]
+      session = check_or_raise_id(wmsg[1], "'session' in HEARTBEAT")
+
+      incoming = wmsg[2]
 
       if type(incoming) not in [int, long]:
          raise ProtocolError("invalid type {} for 'incoming' in HEARTBEAT".format(type(incoming)))
@@ -2157,7 +2248,7 @@ class Heartbeat(Message):
       if incoming < 0: # must be non-negative
          raise ProtocolError("invalid value {} for 'incoming' in HEARTBEAT".format(incoming))
 
-      outgoing = wmsg[2]
+      outgoing = wmsg[3]
 
       if type(outgoing) not in [int, long]:
          raise ProtocolError("invalid type {} for 'outgoing' in HEARTBEAT".format(type(outgoing)))
@@ -2166,12 +2257,12 @@ class Heartbeat(Message):
          raise ProtocolError("invalid value {} for 'outgoing' in HEARTBEAT".format(outgoing))
 
       discard = None
-      if len(wmsg) > 3:
-         discard = wmsg[3]
+      if len(wmsg) > 4:
+         discard = wmsg[4]
          if type(discard) not in (str, unicode):
             raise ProtocolError("invalid type {} for 'discard' in HEARTBEAT".format(type(discard)))
 
-      obj = Heartbeat(incoming, outgoing, discard = discard)
+      obj = Heartbeat(session, incoming, outgoing, discard = discard)
 
       return obj
 
@@ -2181,13 +2272,13 @@ class Heartbeat(Message):
       Implements :func:`autobahn.wamp.interfaces.IMessage.marshal`
       """
       if self.discard:
-         return [Heartbeat.MESSAGE_TYPE, self.incoming, self.outgoing, self.discard]
+         return [Heartbeat.MESSAGE_TYPE, self.session, self.incoming, self.outgoing, self.discard]
       else:
-         return [Heartbeat.MESSAGE_TYPE, self.incoming, self.outgoing]
+         return [Heartbeat.MESSAGE_TYPE, self.session, self.incoming, self.outgoing]
 
 
    def __str__(self):
       """
       Implements :func:`autobahn.wamp.interfaces.IMessage.__str__`
       """
-      return "WAMP HEARTBEAT Message (incoming {}, outgoing = {}, len(discard) = {})".format(self.incoming, self.outgoing, len(self.discard) if self.discard else None)
+      return "WAMP HEARTBEAT Message (session = {}, incoming = {}, outgoing = {}, len(discard) = {})".format(self.session, self.incoming, self.outgoing, len(self.discard) if self.discard else None)

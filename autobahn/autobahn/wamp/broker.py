@@ -141,7 +141,7 @@ class Broker:
       ## send publish acknowledge when requested
       ##
       if publish.acknowledge:
-         msg = message.Published(publish.request, publication)
+         msg = message.Published(session._my_session_id, publish.request, publication)
          session._transport.send(msg)
 
       ## if receivers is non-empty, dispatch event ..
@@ -151,12 +151,18 @@ class Broker:
             publisher = session._my_session_id
          else:
             publisher = None
-         msg = message.Event(subscription,
-                             publication,
-                             args = publish.args,
-                             kwargs = publish.kwargs,
-                             publisher = publisher)
+         # msg = message.Event(subscription,
+         #                     publication,
+         #                     args = publish.args,
+         #                     kwargs = publish.kwargs,
+         #                     publisher = publisher)
          for session in receivers:
+            msg = message.Event(session._my_session_id,
+                                subscription,
+                                publication,
+                                args = publish.args,
+                                kwargs = publish.kwargs,
+                                publisher = publisher)
             session._transport.send(msg)
 
 
@@ -183,10 +189,10 @@ class Broker:
          if not subscription in self._session_to_subscriptions[session]:
             self._session_to_subscriptions[session].add(subscription)
 
-         reply = message.Subscribed(subscribe.request, subscription)
+         reply = message.Subscribed(session._my_session_id, subscribe.request, subscription)
 
       else:
-         reply = message.Error(message.Subscribe, subscribe.request, ApplicationError.INVALID_TOPIC)
+         reply = message.Error(session._my_session_id, message.Subscribe, subscribe.request, ApplicationError.INVALID_TOPIC)
 
       session._transport.send(reply)
 
@@ -211,9 +217,9 @@ class Broker:
 
          self._session_to_subscriptions[session].discard(unsubscribe.subscription)
 
-         reply = message.Unsubscribed(unsubscribe.request)
+         reply = message.Unsubscribed(session._my_session_id, unsubscribe.request)
 
       else:
-         reply = message.Error(message.Unsubscribe, unsubscribe.request, ApplicationError.NO_SUCH_SUBSCRIPTION)
+         reply = message.Error(session._my_session_id, message.Unsubscribe, unsubscribe.request, ApplicationError.NO_SUCH_SUBSCRIPTION)
 
       session._transport.send(reply)

@@ -116,9 +116,9 @@ class Dealer:
 
          self._session_to_registrations[session].add(registration_id)
 
-         reply = message.Registered(register.request, registration_id)
+         reply = message.Registered(session._my_session_id, register.request, registration_id)
       else:
-         reply = message.Error(message.Register.MESSAGE_TYPE, register.request, 'wamp.error.procedure_already_exists')
+         reply = message.Error(session._my_session_id, message.Register.MESSAGE_TYPE, register.request, 'wamp.error.procedure_already_exists')
 
       session._transport.send(reply)
 
@@ -131,9 +131,9 @@ class Dealer:
 
          self._session_to_registrations[session].discard(unregister.registration)
 
-         reply = message.Unregistered(unregister.request)
+         reply = message.Unregistered(session._my_session_id, unregister.request)
       else:
-         reply = message.Error(message.Unregister.MESSAGE_TYPE, unregister.request, 'wamp.error.no_such_registration')
+         reply = message.Error(session._my_session_id, message.Unregister.MESSAGE_TYPE, unregister.request, 'wamp.error.no_such_registration')
 
       session._transport.send(reply)
 
@@ -150,7 +150,8 @@ class Dealer:
          else:
             caller = None
 
-         invocation = message.Invocation(request_id,
+         invocation = message.Invocation(endpoint_session._my_session_id,
+                                         request_id,
                                          registration_id,
                                          args = call.args,
                                          kwargs = call.kwargs,
@@ -161,7 +162,7 @@ class Dealer:
          self._invocations[request_id] = (call, session)
          endpoint_session._transport.send(invocation)
       else:
-         reply = message.Error(message.Call.MESSAGE_TYPE, call.request, 'wamp.error.no_such_procedure')
+         reply = message.Error(session._my_session_id, message.Call.MESSAGE_TYPE, call.request, 'wamp.error.no_such_procedure')
          session._transport.send(reply)
 
 
@@ -174,7 +175,7 @@ class Dealer:
 
       if yield_.request in self._invocations:
          call_msg, call_session = self._invocations[yield_.request]
-         msg = message.Result(call_msg.request, args = yield_.args, kwargs = yield_.kwargs, progress = yield_.progress)
+         msg = message.Result(call_session._my_session_id, call_msg.request, args = yield_.args, kwargs = yield_.kwargs, progress = yield_.progress)
          call_session._transport.send(msg)
          if not yield_.progress:
             del self._invocations[yield_.request]
@@ -186,7 +187,7 @@ class Dealer:
 
       if error.request in self._invocations:
          call_msg, call_session = self._invocations[error.request]
-         msg = message.Error(message.Call.MESSAGE_TYPE, call_msg.request, error.error, args = error.args, kwargs = error.kwargs)
+         msg = message.Error(call_session._my_session_id, message.Call.MESSAGE_TYPE, call_msg.request, error.error, args = error.args, kwargs = error.kwargs)
          call_session._transport.send(msg)
          del self._invocations[error.request]
       else:

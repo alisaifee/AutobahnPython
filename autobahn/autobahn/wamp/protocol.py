@@ -154,7 +154,7 @@ class WampBaseSession:
       :type exc: Instance of :class:`Exception` or subclass thereof.
       """
       if isinstance(exc, exception.ApplicationError):
-         msg = message.Error(request_type, request, exc.error, args = exc.args, kwargs = exc.kwargs)
+         msg = message.Error(self._my_session_id, request_type, request, exc.error, args = exc.args, kwargs = exc.kwargs)
       else:
          if self._ecls_to_uri_pat.has_key(exc.__class__):
             error = self._ecls_to_uri_pat[exc.__class__][0]._uri
@@ -163,11 +163,11 @@ class WampBaseSession:
 
          if hasattr(exc, 'args'):
             if hasattr(exc, 'kwargs'):
-               msg = message.Error(request_type, request, error, args = exc.args, kwargs = exc.kwargs)
+               msg = message.Error(self._my_session_id, request_type, request, error, args = exc.args, kwargs = exc.kwargs)
             else:
-               msg = message.Error(request_type, request, error, args = exc.args)
+               msg = message.Error(self._my_session_id, request_type, request, error, args = exc.args)
          else:
-            msg = message.Error(request_type, request, error)
+            msg = message.Error(self._my_session_id, request_type, request, error)
 
       return msg
 
@@ -293,7 +293,7 @@ class WampAppSession(WampBaseSession):
       if self._dealer:
          roles.append(role.RoleDealerFeatures())
 
-      msg = message.Hello(self._my_session_id, roles)
+      msg = message.Hello(self._my_session_id, 'default', roles)
       self._transport.send(msg)
 
 
@@ -499,7 +499,7 @@ class WampAppSession(WampBaseSession):
 
                      if msg.receive_progress:
                         def progress(*args, **kwargs):
-                           progress_msg = message.Yield(msg.request, args = args, kwargs = kwargs, progress = True)
+                           progress_msg = message.Yield(self._my_session_id, msg.request, args = args, kwargs = kwargs, progress = True)
                            self._transport.send(progress_msg)
                      else:
                         progress = None
@@ -526,9 +526,9 @@ class WampAppSession(WampBaseSession):
                      del self._invocations[msg.request]
 
                      if isinstance(res, types.CallResult):
-                        reply = message.Yield(msg.request, args = res.results, kwargs = res.kwresults)
+                        reply = message.Yield(self._my_session_id, msg.request, args = res.results, kwargs = res.kwresults)
                      else:
-                        reply = message.Yield(msg.request, args = [res])
+                        reply = message.Yield(self._my_session_id, msg.request, args = [res])
                      self._transport.send(reply)
 
                   def error(err):
@@ -679,7 +679,7 @@ class WampAppSession(WampBaseSession):
       Implements :func:`autobahn.wamp.interfaces.ISession.closeSession`
       """
       if not self._goodbye_sent:
-         msg = wamp.message.Goodbye(reason = reason, message = message)
+         msg = wamp.message.Goodbye(self._my_session_id, reason = reason, message = message)
          self._transport.send(msg)
          self._goodbye_sent = True
       else:
@@ -699,10 +699,10 @@ class WampAppSession(WampBaseSession):
 
       if 'options' in kwargs and isinstance(kwargs['options'], types.PublishOptions):
          opts = kwargs.pop('options')
-         msg = message.Publish(request, topic, args = args, kwargs = kwargs, **opts.options)
+         msg = message.Publish(self._my_session_id, request, topic, args = args, kwargs = kwargs, **opts.options)
       else:
          opts = None
-         msg = message.Publish(request, topic, args = args, kwargs = kwargs)
+         msg = message.Publish(self._my_session_id, request, topic, args = args, kwargs = kwargs)
 
       if opts and opts.options['acknowledge'] == True:
          d = Deferred()
@@ -731,9 +731,9 @@ class WampAppSession(WampBaseSession):
       self._subscribe_reqs[request] = (d, handler, options)
 
       if options is not None:
-         msg = message.Subscribe(request, topic, **options.options)
+         msg = message.Subscribe(self._my_session_id, request, topic, **options.options)
       else:
-         msg = message.Subscribe(request, topic)
+         msg = message.Subscribe(self._my_session_id, request, topic)
 
       self._transport.send(msg)
       return d
@@ -755,7 +755,7 @@ class WampAppSession(WampBaseSession):
       d = Deferred()
       self._unsubscribe_reqs[request] = (d, subscription)
 
-      msg = message.Unsubscribe(request, subscription.id)
+      msg = message.Unsubscribe(self._my_session_id, request, subscription.id)
 
       self._transport.send(msg)
       return d
@@ -774,13 +774,13 @@ class WampAppSession(WampBaseSession):
 
       if 'options' in kwargs and isinstance(kwargs['options'], types.CallOptions):
          opts = kwargs.pop('options')
-         msg = message.Call(request, procedure, args = args, kwargs = kwargs, **opts.options)
+         msg = message.Call(self._my_session_id, request, procedure, args = args, kwargs = kwargs, **opts.options)
       else:
          opts = None
-         msg = message.Call(request, procedure, args = args, kwargs = kwargs)
+         msg = message.Call(self._my_session_id, request, procedure, args = args, kwargs = kwargs)
 
       def canceller(_d):
-         cancel_msg = message.Cancel(request)
+         cancel_msg = message.Cancel(self._my_session_id, request)
          self._transport.send(cancel_msg)
 
       d = Deferred(canceller)
@@ -807,9 +807,9 @@ class WampAppSession(WampBaseSession):
       self._register_reqs[request] = (d, endpoint, options)
 
       if options is not None:
-         msg = message.Register(request, procedure, **options.options)
+         msg = message.Register(self._my_session_id, request, procedure, **options.options)
       else:
-         msg = message.Register(request, procedure)
+         msg = message.Register(self._my_session_id, request, procedure)
 
       self._transport.send(msg)
       return d
